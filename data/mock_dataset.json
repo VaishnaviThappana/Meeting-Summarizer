@@ -1,0 +1,12 @@
+[
+    {
+        "id": "meet_001",
+        "transcript": "Alice: Hi everyone, thanks for joining the product sync. Let's start with updates. Bob, how is the new feature coming along?\nBob: I've finished the backend API, but I need to integrate the frontend. I will do this by Friday.\nCharlie: Great. Once that's done, we decided that we need to test it thoroughly before the launch next week.\nAlice: Good point. Charlie, can you write the test cases by Wednesday?\nCharlie: Yes, no problem.\nAlice: Awesome. I need to prepare the presentation for the stakeholders. Are there any other topics?\nBob: We have an issue with the database latency. It's slowing down queries.\nAlice: Let's discuss that in a separate meeting. I will schedule a call with the DevOps team tomorrow to address the latency.",
+        "summary": "Alice led the product sync meeting. Bob completed the backend API and will finish the frontend integration by Friday. Charlie will write test cases by Wednesday in preparation for next week's launch. A database latency issue was raised, and Alice will schedule a meeting with DevOps tomorrow to discuss it. Alice is also preparing a presentation for stakeholders."
+    },
+    {
+        "id": "meet_002",
+        "transcript": "Sarah: Welcome to the marketing strategy meeting. Our main goal today is to finalize the Q3 campaign.\nJohn: I reviewed the draft, and I think we need more focus on social media channels, specifically Instagram and TikTok.\nEmily: I agree. I can draft a content calendar for those platforms by next Monday.\nSarah: Perfect. We also decided to increase the ad budget by 15% to support this. John, please update the budget sheet.\nJohn: Will do by EOD today. What about the email newsletter?\nSarah: The design is ready, but the copy needs review. I need to finalize the newsletter copy by Thursday.\nEmily: Sounds like a solid plan.",
+        "summary": "The marketing team discussed the Q3 campaign strategy. John suggested focusing more on Instagram and TikTok, and Emily will draft a content calendar by Monday. The team agreed to increase the ad budget by 15%, which John will update by the end of the day. Sarah will finalize the email newsletter copy by Thursday."
+    }
+]
