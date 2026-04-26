@@ -1,0 +1,27 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+.env/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration
+.vscode/
+.idea/
+
+# Application Specific
+temp_meeting_audio*
+temp_audio.file
+meeting_summary.pdf
+
+# OS Specific
+.DS_Store
+Thumbs.db

@@ -3,59 +3,66 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
 
-# We assume 'nltk' data is already downloaded (punkt, stopwords)
-# Fallback downloading inside script just in case
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
+# ── NLTK data bootstrap ───────────────────────────────────────────────────────
+for _resource, _path in [
+    ("punkt",       "tokenizers/punkt"),
+    ("punkt_tab",   "tokenizers/punkt_tab"),
+    ("stopwords",   "corpora/stopwords"),
+]:
+    try:
+        nltk.data.find(_path)
+    except LookupError:
+        nltk.download(_resource, quiet=True)
 
-FILLER_WORDS = {"um", "uh", "like", "you know", "actually", "basically", "literally", "yeah", "hmm", "ah"}
+# ── Constants ─────────────────────────────────────────────────────────────────
+FILLER_WORDS = frozenset({
+    "um", "uh", "like", "you know", "actually", "basically",
+    "literally", "yeah", "hmm", "ah",
+})
+
 
 class Preprocessor:
+    """Handles text cleaning and tokenization for meeting transcripts."""
+
     def __init__(self):
-        self.stop_words = set(stopwords.words('english')).union(FILLER_WORDS)
+        self.stop_words = set(stopwords.words("english")).union(FILLER_WORDS)
 
     def clean_text(self, text: str) -> str:
+        """Normalize text: lowercase, remove special chars, and strip filler words.
+
+        Args:
+            text: Raw input string.
+
+        Returns:
+            Cleaned string suitable for feature extraction.
         """
-        Normalizes text, removes punctuation, and removes filler words.
-        Returns a single cleaned string.
-        """
-        # Lowercase
         text = text.lower()
-        
-        # Remove punctuation but keep basic sentence enders for context if needed, 
-        # though for strict cleaning we usually remove all non-alphanumeric.
-        # Let's remove special characters except basic punctuation
-        text = re.sub(r'[^a-zA-Z0-9\s\.\,\!\?]', '', text)
-
-        # Tokenize words to remove filler words easily
+        text = re.sub(r"[^a-zA-Z0-9\s\.,!?]", "", text)
         words = word_tokenize(text)
-        cleaned_words = [word for word in words if word not in FILLER_WORDS]
-        
-        # Rejoin text
-        return ' '.join(cleaned_words)
+        cleaned = [w for w in words if w not in FILLER_WORDS]
+        return " ".join(cleaned)
 
-    def tokenize_sentences(self, text: str) -> list[str]:
-        """Tokenize text into sentences."""
+    def tokenize_sentences(self, text: str) -> list:
+        """Split text into a list of sentences."""
         return sent_tokenize(text)
 
-    def tokenize_words(self, text: str) -> list[str]:
-        """Tokenize text into words."""
+    def tokenize_words(self, text: str) -> list:
+        """Split text into a list of word tokens."""
         return word_tokenize(text)
 
-    def process_for_extractive(self, text: str) -> list[str]:
-        """
-        Returns a list of original sentences, and a parallel list of cleaned sentences 
-        which can be used for feature extraction (like TF-IDF).
+    def process_for_extractive(self, text: str) -> tuple:
+        """Return original sentences and their cleaned counterparts.
+
+        Args:
+            text: Raw transcript string.
+
+        Returns:
+            Tuple of (original_sentences, cleaned_sentences).
         """
         sentences = self.tokenize_sentences(text)
         cleaned_sentences = [self.clean_text(s) for s in sentences]
         return sentences, cleaned_sentences
+
 
 if __name__ == "__main__":
     p = Preprocessor()

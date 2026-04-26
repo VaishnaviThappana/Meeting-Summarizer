@@ -1,54 +1,67 @@
+import re
+import sys
 import spacy
-from sklearn.feature_extraction.text import TfidfVectorizer
 import warnings
+from sklearn.feature_extraction.text import TfidfVectorizer
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
 class FeatureExtractor:
+    """Extracts keywords and named entities from text using TF-IDF and spaCy."""
+
     def __init__(self):
         try:
             self.nlp = spacy.load("en_core_web_sm")
         except OSError:
-            # Fallback if model is not downloaded
+            # Use the current Python executable to avoid calling the wrong venv
             import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+            subprocess.run(
+                [sys.executable, "-m", "spacy", "download", "en_core_web_sm"],
+                check=True,
+            )
             self.nlp = spacy.load("en_core_web_sm")
-            
-        self.vectorizer = TfidfVectorizer(stop_words='english', max_features=20)
 
-    def extract_keywords(self, text: str, top_n: int = 5) -> list[str]:
-        """Extract top keywords using TF-IDF."""
-        # TF-IDF requires an iterable of documents. We will treat sentences as documents.
-        # If input is a single string, we split by basic punctuation.
-        import re
-        sentences = [s.strip() for s in re.split(r'[.!?\n]', text) if len(s.strip()) > 5]
-        
+        self.vectorizer = TfidfVectorizer(stop_words="english", max_features=20)
+
+    def extract_keywords(self, text: str, top_n: int = 5) -> list:
+        """Extract top keywords from text using TF-IDF scoring.
+
+        Args:
+            text: Raw input text.
+            top_n: Number of top keywords to return.
+
+        Returns:
+            A list of keyword strings.
+        """
+        sentences = [s.strip() for s in re.split(r"[.!?\n]", text) if len(s.strip()) > 5]
         if not sentences:
             return []
 
         try:
             tfidf_matrix = self.vectorizer.fit_transform(sentences)
             feature_names = self.vectorizer.get_feature_names_out()
-            
-            # Sum tfidf scores across all sentences
             scores = tfidf_matrix.sum(axis=0).A1
-            
-            # Sort by score
             top_indices = scores.argsort()[-top_n:][::-1]
             return [feature_names[i] for i in top_indices]
         except ValueError:
             return []
 
     def extract_entities(self, text: str) -> dict:
-        """Perform NER using spaCy and return entities grouped by label."""
+        """Perform Named Entity Recognition using spaCy.
+
+        Args:
+            text: Raw input text.
+
+        Returns:
+            A dict mapping entity label -> list of unique entity strings.
+        """
         doc = self.nlp(text)
-        entities = {}
+        entities: dict = {}
         for ent in doc.ents:
-            if ent.label_ not in entities:
-                entities[ent.label_] = set()
-            entities[ent.label_].add(ent.text)
-            
-        # Convert sets to lists for JSON serialization if needed
+            entities.setdefault(ent.label_, set()).add(ent.text)
         return {k: list(v) for k, v in entities.items()}
+
 
 if __name__ == "__main__":
     extractor = FeatureExtractor()
