@@ -104,67 +104,78 @@ def create_pdf_download_link(summary: str, action_items: dict, filename: str = "
 
 # ── Audio Transcription ───────────────────────────────────────────────────────
 
-# Module-level cache: model is loaded once and reused for all calls.
-_whisper_model = None
-
-
-def _ensure_ffmpeg_on_path() -> None:
-    """Make the imageio-ffmpeg binary discoverable by faster-whisper.
-
-    faster-whisper (via ctranslate2 / ffmpeg-python) respects the PATH
-    environment variable. On Windows the env-var update is visible to the
-    *current* Python process without a restart, which is all we need because
-    faster-whisper spawns ffmpeg as a child process of this same process.
-    """
-    try:
-        import imageio_ffmpeg
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-        ffmpeg_dir = os.path.dirname(os.path.abspath(ffmpeg_exe))
-
-        # Prepend dir to PATH so child processes find it
-        current = os.environ.get("PATH", "")
-        if ffmpeg_dir not in current:
-            os.environ["PATH"] = ffmpeg_dir + os.pathsep + current
-
-        # Also set the explicit env-var that some Whisper builds honour
-        os.environ.setdefault("FFMPEG_BINARY", ffmpeg_exe)
-
-    except Exception as e:
-        raise RuntimeError(
-            f"Could not locate ffmpeg. "
-            f"Run: pip install imageio-ffmpeg\n({e})"
-        ) from e
+# Module-level cache: loaded once, reused across calls.
+_asr_pipeline = None
 
 
 def transcribe_audio(audio_path: str) -> str:
-    """Transcribe an audio file to text using faster-whisper.
+    """Transcribe an audio file to text using HuggingFace Whisper pipeline.
 
-    The WhisperModel is cached after the first call so subsequent
-    transcriptions do not pay the model-load cost.
+    Uses openai/whisper-small via the transformers ASR pipeline.
+    No external ffmpeg binary required — librosa handles decoding.
+    The pipeline is cached after first load.
 
     Args:
-        audio_path: Path to the audio file on disk (must keep original extension
-                    so ffmpeg can identify the format, e.g. .mp3, .wav, .m4a).
+        audio_path: Path to the audio file (.mp3 / .wav / .m4a / .flac).
 
     Returns:
         The full transcript as a single string.
 
     Raises:
-        RuntimeError: If ffmpeg is missing or transcription fails.
+        RuntimeError: If transcription fails.
     """
-    global _whisper_model
-
-    # Ensure ffmpeg is findable before loading Whisper
-    _ensure_ffmpeg_on_path()
-
-    from faster_whisper import WhisperModel
-
-    # Load once, reuse forever
-    if _whisper_model is None:
-        _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    global _asr_pipeline
 
     try:
-        segments, _info = _whisper_model.transcribe(audio_path, beam_size=5)
-        return " ".join(seg.text.strip() for seg in segments)
+        import torch
+        from transformers import pipeline as hf_pipeline
+        import librosa
+        import numpy as np
+    except ImportError as e:
+        raise RuntimeError(
+            f"Missing dependency: {e}. "
+            "Run: pip install transformers torch librosa"
+        ) from e
+
+    # ── Load pipeline once ────────────────────────────────────────────────────
+    if _asr_pipeline is None:
+        try:
+            _asr_pipeline = hf_pipeline(
+                "automatic-speech-recognition",
+                model="openai/whisper-small",
+                device=-1,          # CPU
+                chunk_length_s=30,  # stream long audio in 30-second windows
+                stride_length_s=5,
+            )
+        except Exception:
+            # Fallback to even smaller model
+            _asr_pipeline = hf_pipeline(
+                "automatic-speech-recognition",
+                model="openai/whisper-tiny",
+                device=-1,
+                chunk_length_s=30,
+                stride_length_s=5,
+            )
+
+    # ── Load audio with librosa (handles mp3/wav/m4a/flac without system ffmpeg)
+    try:
+        audio_array, sampling_rate = librosa.load(audio_path, sr=16000, mono=True)
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not decode audio file '{audio_path}': {e}\n"
+            "Ensure the file is a valid .mp3, .wav, .m4a, or .flac recording."
+        ) from e
+
+    # ── Run ASR ───────────────────────────────────────────────────────────────
+    try:
+        result = _asr_pipeline(
+            {"array": audio_array, "sampling_rate": sampling_rate},
+            return_timestamps=False,
+            generate_kwargs={"task": "translate", "language": "en"},
+        )
+        text = result.get("text", "").strip() if isinstance(result, dict) else str(result).strip()
+        if not text:
+            raise RuntimeError("Whisper returned an empty transcript. The audio may be silent or too short.")
+        return text
     except Exception as e:
         raise RuntimeError(f"Transcription error: {e}") from e

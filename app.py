@@ -1,7 +1,5 @@
 import os
 import sys
-import time
-import threading
 import streamlit as st
 from textblob import TextBlob
 
@@ -298,13 +296,6 @@ except Exception as e:
 for _k, _v in [
     ("transcript", ""),
     ("run_analysis", False),
-    ("audio_bytes", None),
-    ("audio_name", ""),
-    # Transcription thread state
-    ("tx_in_progress", False),
-    ("tx_result",      None),
-    ("tx_error",       None),
-    ("tx_tmp_path",    None),
 ]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -400,77 +391,29 @@ with tab2:
     audio_file = st.file_uploader("Upload Audio", type=["mp3", "wav", "m4a", "flac"],
                                   label_visibility="collapsed")
     if audio_file:
-        st.session_state.audio_bytes = audio_file.getbuffer().tobytes()
-        st.session_state.audio_name  = audio_file.name
         st.audio(audio_file)
-        if st.button("🎙️  Transcribe & Analyze", use_container_width=True,
-                     disabled=st.session_state.tx_in_progress):
-            # Save audio to a temp file with the correct extension
-            ext = os.path.splitext(st.session_state.audio_name)[-1] or ".mp3"
+        if st.button("🎙️  Transcribe & Analyze", use_container_width=True):
+            ext = os.path.splitext(audio_file.name)[-1] or ".mp3"
             tmp = f"temp_meeting_audio{ext}"
             with open(tmp, "wb") as f:
-                f.write(st.session_state.audio_bytes)
+                f.write(audio_file.getbuffer().tobytes())
 
-            # Reset state for a fresh run
-            st.session_state.tx_result      = None
-            st.session_state.tx_error       = None
-            st.session_state.tx_in_progress = True
-            st.session_state.tx_tmp_path    = tmp
-            st.session_state.audio_bytes    = None  # free memory
-
-            # ── Background thread: never blocks the Streamlit main thread ──
-            def _transcription_worker(path: str) -> None:
-                try:
-                    result = transcribe_audio(path)
-                    st.session_state.tx_result = result
-                except Exception as exc:
-                    st.session_state.tx_error = str(exc)
-                finally:
-                    if os.path.exists(path):
-                        os.remove(path)
-
-            t = threading.Thread(
-                target=_transcription_worker,
-                args=(tmp,),
-                daemon=True,
-            )
-            t.start()
-            st.rerun()
-
-    if st.session_state.tx_in_progress:
-        st.info(f"🎙️ Transcribing **{st.session_state.audio_name}** in the background…")
+            # ── Synchronous transcription on main thread (no threading needed) ──
+            try:
+                with st.spinner(f"🎙️ Transcribing **{audio_file.name}**… (first run downloads the model — please wait)"):
+                    transcript = transcribe_audio(tmp)
+                st.session_state.transcript   = transcript
+                st.session_state.run_analysis = True
+                st.success("✅ Transcription complete — running full analysis…")
+            except Exception as exc:
+                st.error(f"❌ Transcription failed: {exc}")
+            finally:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
 
 st.divider()
 
-# ── Transcription poller (keeps websocket alive while thread runs) ────────────
-if st.session_state.tx_in_progress:
-    if st.session_state.tx_result is not None:
-        # ✅ Thread finished successfully
-        st.session_state.transcript     = st.session_state.tx_result
-        st.session_state.tx_result      = None
-        st.session_state.tx_in_progress = False
-        st.session_state.run_analysis   = True
-        st.rerun()
-
-    elif st.session_state.tx_error:
-        # ❌ Thread raised an exception
-        st.error(f"❌ Transcription failed: {st.session_state.tx_error}")
-        st.session_state.tx_error       = None
-        st.session_state.tx_in_progress = False
-
-    else:
-        # ⏳ Still running — show progress and poll every 2 s
-        with st.container():
-            st.markdown("""
-            <div style='background:#21262d; border:1px solid #30363d; border-radius:12px;
-                        padding:1.5rem; text-align:center; margin:1rem 0;'>
-                <div style='font-size:1.5rem; margin-bottom:0.5rem;'>🎙️</div>
-                <div style='color:#c9d1d9; font-weight:600; margin-bottom:0.3rem;'>Transcribing Audio…</div>
-                <div style='color:#8b949e; font-size:0.85rem;'>This runs in the background. The page refreshes every 2 s automatically.</div>
-            </div>
-            """, unsafe_allow_html=True)
-        time.sleep(2)
-        st.rerun()
+# (threading poller removed — transcription now runs synchronously in main thread)
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 if st.session_state.run_analysis and st.session_state.transcript.strip():

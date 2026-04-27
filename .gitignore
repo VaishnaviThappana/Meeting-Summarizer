@@ -16,8 +16,14 @@ htmlcov/
 # Local configuration
 .vscode/
 .idea/
+.streamlit/secrets.toml
 
-# Application Specific
+# Datasets and Training Outputs (Unnecessary for inference)
+data/
+results/
+models/
+
+# Application Specific (Generated during run)
 temp_meeting_audio*
 temp_audio.file
 meeting_summary.pdf
